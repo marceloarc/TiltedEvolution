@@ -96,7 +96,6 @@ BSPointerHandle<Projectile>* TP_MAKE_THISCALL(HookLaunch, BSPointerHandle<Projec
     Event.ForceConeOfFire = arData.bForceConeOfFire;
 
     auto result = TiltedPhoques::ThisCall(RealLaunch, apThis, arData);
-
     TP_ASSERT(result, "No projectile handle returned.");
 
     TESObjectREFR* pObject = TESObjectREFR::GetByHandle(result->handle.iBits);

@@ -51,11 +51,11 @@ void CombatService::OnProjectileLaunchedEvent(const ProjectileLaunchedEvent& acE
     LocalComponent& localComponent = view.get<LocalComponent>(*shooterEntityIt);
 
     ProjectileLaunchRequest request{};
-
+    
     request.OriginX = acEvent.Origin.x;
     request.OriginY = acEvent.Origin.y;
     request.OriginZ = acEvent.Origin.z;
-
+    
     modSystem.GetServerModId(acEvent.ProjectileBaseID, request.ProjectileBaseID);
     modSystem.GetServerModId(acEvent.WeaponID, request.WeaponID);
     modSystem.GetServerModId(acEvent.AmmoID, request.AmmoID);
@@ -133,7 +133,6 @@ void CombatService::OnNotifyProjectileLaunch(const NotifyProjectileLaunch& acMes
     launchData.fZAngle = acMessage.ZAngle;
     launchData.fXAngle = acMessage.XAngle;
     launchData.fYAngle = acMessage.YAngle;
-
     const uint32_t cSpellId = modSystem.GetGameId(acMessage.SpellID);
     launchData.pSpell = Cast<MagicItem>(TESForm::GetById(cSpellId));
 

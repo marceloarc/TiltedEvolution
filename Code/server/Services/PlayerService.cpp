@@ -15,6 +15,8 @@
 #include <Messages/NotifyPlayerRespawn.h>
 #include <Messages/NotifyRespawn.h>
 #include <Messages/PlayerLevelRequest.h>
+#include <Messages/NotifyRes.h>
+#include <Messages/ResRequest.h>
 #include <Messages/NotifyPlayerLevel.h>
 #include <Messages/NotifyPlayerCellChanged.h>
 
@@ -29,7 +31,8 @@ PlayerService::PlayerService(World& aWorld, entt::dispatcher& aDispatcher) noexc
     , m_gridCellShiftConnection(aDispatcher.sink<PacketEvent<ShiftGridCellRequest>>().connect<&PlayerService::HandleGridCellShift>(this))
     , m_exteriorCellEnterConnection(aDispatcher.sink<PacketEvent<EnterExteriorCellRequest>>().connect<&PlayerService::HandleExteriorCellEnter>(this))
     , m_playerRespawnConnection(aDispatcher.sink<PacketEvent<PlayerRespawnRequest>>().connect<&PlayerService::OnPlayerRespawnRequest>(this))
-    , m_playerLevelConnection(aDispatcher.sink<PacketEvent<PlayerLevelRequest>>().connect<&PlayerService::OnPlayerLevelRequest>(this))
+    , m_playerLevelConnection(aDispatcher.sink<PacketEvent<PlayerLevelRequest>>().connect<&PlayerService::OnPlayerLevelRequest>(this)),
+      m_resConnection(aDispatcher.sink<PacketEvent<ResRequest>>().connect<&PlayerService::OnResRequest>(this))
 {
 }
 
@@ -79,6 +82,19 @@ void PlayerService::HandleGridCellShift(const PacketEvent<ShiftGridCellRequest>&
 
         pPlayer->Send(spawnMessage);
     }
+}
+
+void PlayerService::OnResRequest(const PacketEvent<ResRequest>& acMessage) const noexcept
+{
+    auto& message = acMessage.Packet;
+
+    NotifyRes notify;
+    notify.TargetId = message.TargetId;
+    notify.PlayerId = message.PlayerId;
+
+    const entt::entity cEntity = static_cast<entt::entity>(message.PlayerId);
+    if (!GameServer::Get()->SendToPlayersInRange(notify, cEntity, acMessage.GetSender()))
+        spdlog::error("{}: SendToPlayersInRange failed", __FUNCTION__);
 }
 
 void PlayerService::HandleExteriorCellEnter(const PacketEvent<EnterExteriorCellRequest>& acMessage) const noexcept
@@ -189,7 +205,7 @@ void PlayerService::OnPlayerRespawnRequest(const PacketEvent<PlayerRespawnReques
 
             acMessage.pPlayer->Send(notifyPlayerRespawn);
         }
-
+        
         // Let all other players in cell respawn this player, since the body state seems to be bugged otherwise
         NotifyRespawn notifyRespawn{};
         notifyRespawn.ActorId = World::ToInteger(*character);

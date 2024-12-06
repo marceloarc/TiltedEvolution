@@ -114,11 +114,46 @@ NiPoint3 PlayerCharacter::RespawnPlayer() noexcept
     NiPoint3 rot{};
     pCell->GetCOCPlacementInfo(&pos, &rot, true);
 
-    MoveTo(pCell, pos);
+    // Make bleedout state unrecoverable again for when the player goes down the next time
+    SetNoBleedoutRecovery(true);
+    PlayerCharacter::SetGodMode(false);
+    return pos;
+}
+
+
+NiPoint3 PlayerCharacter::RespawnPlayerPos() noexcept
+{
+    // Make bleedout state recoverable
+    SetNoBleedoutRecovery(false);
+
+    DispelAllSpells();
+
+    // Reset health to max
+    // TODO(cosideci): there's a cleaner way to do this
+    ForceActorValue(ActorValueOwner::ForceMode::DAMAGE, ActorValueInfo::kHealth, 1000000);
+
+    TESObjectCELL* pCell = nullptr;
+
+    if (GetWorldSpace())
+    {
+        // TP to Whiterun temple when killed in world space
+        TES* pTes = TES::Get();
+        pCell = ModManager::Get()->GetCellFromCoordinates(pTes->centerGridX, pTes->centerGridY, GetWorldSpace(), false);
+    }
+    else
+    {
+        // TP to start of cell when killed in an interior
+        pCell = GetParentCell();
+    }
+
+    NiPoint3 pos{};
+    NiPoint3 rot{};
+    pCell->GetCOCPlacementInfo(&pos, &rot, true);
 
     // Make bleedout state unrecoverable again for when the player goes down the next time
     SetNoBleedoutRecovery(true);
-
+    PlayerCharacter::SetGodMode(false);
+    MoveTo(pCell, pos);
     return pos;
 }
 

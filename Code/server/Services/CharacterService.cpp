@@ -283,7 +283,7 @@ void CharacterService::OnOwnershipTransferRequest(const PacketEvent<RequestOwner
         auto& cellIdComponent = m_world.get<CellIdComponent>(cEntity);
         cellIdComponent.WorldSpaceId = message.WorldSpaceId;
         cellIdComponent.Cell = message.CellId;
-        cellIdComponent.CenterCoords = GridCellCoords::CalculateGridCellCoords(message.Position);
+        cellIdComponent.CenterCoords = GridCellCoords::CalculateGridCellCoords(message.Position.x, message.Position.y);
 
         auto& movementComponent = m_world.get<MovementComponent>(cEntity);
         movementComponent.Position = message.Position;
@@ -408,15 +408,13 @@ void CharacterService::OnReferencesMoveRequest(const PacketEvent<ClientReference
 
         auto& update = entry.second;
         auto& movement = update.UpdatedMovement;
-
         movementComponent.Position = movement.Position;
-        movementComponent.Rotation = glm::vec3(movement.Rotation.x, 0.f, movement.Rotation.y);
+        movementComponent.Rotation = {movement.Rotation.x, 0.f, movement.Rotation.y};
         movementComponent.Variables = movement.Variables;
         movementComponent.Direction = movement.Direction;
-
         cellIdComponent.Cell = movement.CellId;
         cellIdComponent.WorldSpaceId = movement.WorldSpaceId;
-        cellIdComponent.CenterCoords = GridCellCoords::CalculateGridCellCoords(movement.Position.x, movement.Position.y);
+        cellIdComponent.CenterCoords = GridCellCoords::CalculateGridCellCoords(movement.Position);
 
         for (auto& action : update.ActionEvents)
         {
@@ -583,7 +581,7 @@ void CharacterService::CreateCharacter(const PacketEvent<AssignCharacterRequest>
     if (message.WorldSpaceId != GameId{})
     {
         cellIdComponent.WorldSpaceId = message.WorldSpaceId;
-        cellIdComponent.CenterCoords = GridCellCoords::CalculateGridCellCoords(message.Position);
+        cellIdComponent.CenterCoords = GridCellCoords::CalculateGridCellCoords(message.Position.x, message.Position.y);
     }
 
     auto& characterComponent = m_world.emplace<CharacterComponent>(cEntity);
@@ -666,6 +664,7 @@ void CharacterService::TransferOwnership(Player* apPlayer, const uint32_t acServ
     characterOwnerComponent.InvalidOwners.clear();
 
     BroadcastActorData(apPlayer, *it, acActorData);
+    
 
     spdlog::debug("\tOwnership claimed {:X}", acServerId);
 }

@@ -153,21 +153,51 @@ void* TP_MAKE_THISCALL(EquipHook, EquipManager, Actor* apActor, TESForm* apItem,
         if (!ScopedEquipOverride::IsOverriden())
             return nullptr;
     }
-
+    if (!pExtension->IsPlayer())
+    {
+        if (pExtension->IsLocal() && !World::Get().GetPartyService().IsLeader())
+        {
+            spdlog::debug("Actor[{:X}]::Equip(), item form id: {:X}", apActor->formID, apItem->formID);
+            if (!ScopedEquipOverride::IsOverriden())
+                return nullptr;
+        }
+    }
     // Consumables are "equipped" as well. We don't want this to sync, for several reasons.
     // The right hand item on the server would be overridden by the consumable.
     // Furthermore, the equip action on the other clients would doubly subtract the consumables.
-    if (pExtension->IsLocal() && !apItem->IsConsumable() && !apData->bQueueEquip)
+    if (pExtension->IsPlayer())
     {
-        EquipmentChangeEvent evt{};
-        evt.ActorId = apActor->formID;
-        evt.Count = apData->count;
-        evt.ItemId = apItem->formID;
-        evt.EquipSlotId = apData->pSlot ? apData->pSlot->formID : 0;
-        evt.IsAmmo = apItem->formType == FormType::Ammo;
+        if (pExtension->IsLocal() && !apItem->IsConsumable() && !apData->bQueueEquip)
+        {
+            spdlog::warn("foi aqui 2");
+            EquipmentChangeEvent evt{};
+            evt.ActorId = apActor->formID;
+            evt.Count = apData->count;
+            evt.ItemId = apItem->formID;
+            evt.EquipSlotId = apData->pSlot ? apData->pSlot->formID : 0;
+            evt.IsAmmo = apItem->formType == FormType::Ammo;
 
-        World::Get().GetRunner().Trigger(evt);
+            World::Get().GetRunner().Trigger(evt);
+        }
+    
     }
+    else
+    {
+        if (pExtension->IsLocal() && !apItem->IsConsumable() && !apData->bQueueEquip &&
+            World::Get().GetPartyService().IsLeader())
+        {
+            spdlog::warn("foi aqui 2");
+            EquipmentChangeEvent evt{};
+            evt.ActorId = apActor->formID;
+            evt.Count = apData->count;
+            evt.ItemId = apItem->formID;
+            evt.EquipSlotId = apData->pSlot ? apData->pSlot->formID : 0;
+            evt.IsAmmo = apItem->formType == FormType::Ammo;
+
+            World::Get().GetRunner().Trigger(evt);
+        }
+    }
+
 
     ScopedUnequipOverride _;
 
@@ -188,18 +218,49 @@ void* TP_MAKE_THISCALL(UnEquipHook, EquipManager, Actor* apActor, TESForm* apIte
         if (!ScopedEquipOverride::IsOverriden() && !ScopedInventoryOverride::IsOverriden())
             return nullptr;
     }
-
-    if (pExtension->IsLocal() && !ScopedUnequipOverride::IsOverriden() && !apData->bQueueEquip)
+    if (!pExtension->IsPlayer())
     {
-        EquipmentChangeEvent evt{};
-        evt.ActorId = apActor->formID;
-        evt.Count = apData->count;
-        evt.ItemId = apItem->formID;
-        evt.EquipSlotId = apData->pSlot ? apData->pSlot->formID : 0;
-        evt.Unequip = true;
-        evt.IsAmmo = apItem->formType == FormType::Ammo;
+        if (pExtension->IsLocal() && !World::Get().GetPartyService().IsLeader())
+        {
+            spdlog::debug("Actor[{:X}]::Unequip(), item form id: {:X}, IsOverridden, equip: {}, inventory: {}", apActor->formID, apItem->formID, ScopedEquipOverride::IsOverriden(), ScopedInventoryOverride::IsOverriden());
+            // The ScopedInventoryOverride check is here to allow the item to be unequipped if it is removed
+            // Without this check, the game will not accept null as a return, and it'll keep trying to unequip infinitely
+            if (!ScopedEquipOverride::IsOverriden() && !ScopedInventoryOverride::IsOverriden())
+                return nullptr;
+        }
+    }
+    if (pExtension->IsPlayer())
+    {
+        if (pExtension->IsLocal() && !ScopedUnequipOverride::IsOverriden() && !apData->bQueueEquip)
+        {
+            spdlog::warn("foi aqui 1");
+            EquipmentChangeEvent evt{};
+            evt.ActorId = apActor->formID;
+            evt.Count = apData->count;
+            evt.ItemId = apItem->formID;
+            evt.EquipSlotId = apData->pSlot ? apData->pSlot->formID : 0;
+            evt.Unequip = true;
+            evt.IsAmmo = apItem->formType == FormType::Ammo;
 
-        World::Get().GetRunner().Trigger(evt);
+            World::Get().GetRunner().Trigger(evt);
+        }
+
+    }
+    else
+    {
+        if (pExtension->IsLocal() && !ScopedUnequipOverride::IsOverriden() && !apData->bQueueEquip && World::Get().GetPartyService().IsLeader())
+        {
+            spdlog::warn("foi aqui 1");
+            EquipmentChangeEvent evt{};
+            evt.ActorId = apActor->formID;
+            evt.Count = apData->count;
+            evt.ItemId = apItem->formID;
+            evt.EquipSlotId = apData->pSlot ? apData->pSlot->formID : 0;
+            evt.Unequip = true;
+            evt.IsAmmo = apItem->formType == FormType::Ammo;
+
+            World::Get().GetRunner().Trigger(evt);
+        }
     }
 
     spdlog::debug("UnEquipHook, actor: {:X}", apActor->formID);
@@ -212,21 +273,52 @@ void* TP_MAKE_THISCALL(EquipSpellHook, EquipManager, Actor* apActor, TESForm* ap
     if (!apActor)
         return nullptr;
 
+
+    if(apActor->IsDead())
+    {
+        return nullptr;
+    }
+
     const auto pExtension = apActor->GetExtension();
     if (pExtension->IsRemote() && !ScopedEquipOverride::IsOverriden())
         return nullptr;
 
-    if (pExtension->IsLocal() && !apData->bQueueEquip)
+    if (!pExtension->IsPlayer())
     {
-        EquipmentChangeEvent evt{};
-        evt.ActorId = apActor->formID;
-        evt.ItemId = apSpell->formID;
-        evt.EquipSlotId = apData->pEquipSlot->formID;
-        evt.IsSpell = true;
-
-        World::Get().GetRunner().Trigger(evt);
+        if (pExtension->IsLocal() && !World::Get().GetPartyService().IsLeader())
+        {
+            if (!ScopedEquipOverride::IsOverriden())
+                return nullptr;
+        }
     }
+    if (pExtension->IsPlayer())
+    {
+        if (pExtension->IsLocal() && !apData->bQueueEquip)
+        {
+            spdlog::warn("foi aqui 3");
+            EquipmentChangeEvent evt{};
+            evt.ActorId = apActor->formID;
+            evt.ItemId = apSpell->formID;
+            evt.EquipSlotId = apData->pEquipSlot->formID;
+            evt.IsSpell = true;
 
+            World::Get().GetRunner().Trigger(evt);
+        }
+    }
+    else
+    {
+        if (pExtension->IsLocal() && !apData->bQueueEquip && World::Get().GetPartyService().IsLeader())
+        {
+            spdlog::warn("foi aqui 3");
+            EquipmentChangeEvent evt{};
+            evt.ActorId = apActor->formID;
+            evt.ItemId = apSpell->formID;
+            evt.EquipSlotId = apData->pEquipSlot->formID;
+            evt.IsSpell = true;
+
+            World::Get().GetRunner().Trigger(evt);
+        }
+    }
     ScopedUnequipOverride _;
 
     return TiltedPhoques::ThisCall(RealEquipSpell, apThis, apActor, apSpell, apData);
@@ -241,16 +333,45 @@ void* TP_MAKE_THISCALL(UnEquipSpellHook, EquipManager, Actor* apActor, TESForm* 
     if (pExtension->IsRemote() && !ScopedEquipOverride::IsOverriden())
         return nullptr;
 
-    if (pExtension->IsLocal() && !ScopedUnequipOverride::IsOverriden() && !apData->bQueueEquip)
+    if (!pExtension->IsPlayer())
     {
-        EquipmentChangeEvent evt{};
-        evt.ActorId = apActor->formID;
-        evt.ItemId = apSpell->formID;
-        evt.EquipSlotId = apData->pEquipSlot->formID;
-        evt.Unequip = true;
-        evt.IsSpell = true;
+        if (pExtension->IsLocal() && !World::Get().GetPartyService().IsLeader())
+        {
+            if (pExtension->IsRemote() && !ScopedEquipOverride::IsOverriden())
+                return nullptr;
+        }
+    }
 
-        World::Get().GetRunner().Trigger(evt);
+    if (pExtension->IsPlayer())
+    {
+        if (pExtension->IsLocal() && !ScopedUnequipOverride::IsOverriden() && !apData->bQueueEquip)
+        {
+            spdlog::warn("foi aqui 4");
+            EquipmentChangeEvent evt{};
+            evt.ActorId = apActor->formID;
+            evt.ItemId = apSpell->formID;
+            evt.EquipSlotId = apData->pEquipSlot->formID;
+            evt.Unequip = true;
+            evt.IsSpell = true;
+
+            World::Get().GetRunner().Trigger(evt);
+        }
+    }
+    else
+    {
+        if (pExtension->IsLocal() && !ScopedUnequipOverride::IsOverriden() && !apData->bQueueEquip &&
+            World::Get().GetPartyService().IsLeader())
+        {
+            spdlog::warn("foi aqui 4");
+            EquipmentChangeEvent evt{};
+            evt.ActorId = apActor->formID;
+            evt.ItemId = apSpell->formID;
+            evt.EquipSlotId = apData->pEquipSlot->formID;
+            evt.Unequip = true;
+            evt.IsSpell = true;
+
+            World::Get().GetRunner().Trigger(evt);
+        }
     }
 
     return TiltedPhoques::ThisCall(RealUnEquipSpell, apThis, apActor, apSpell, apData);
@@ -268,6 +389,7 @@ void* TP_MAKE_THISCALL(EquipShoutHook, EquipManager, Actor* apActor, TESForm* ap
     // TODO: queue check?
     if (pExtension->IsLocal())
     {
+        spdlog::warn("foi aqui 5");
         EquipmentChangeEvent evt{};
         evt.ActorId = apActor->formID;
         evt.ItemId = apShout->formID;
@@ -293,6 +415,7 @@ void* TP_MAKE_THISCALL(UnEquipShoutHook, EquipManager, Actor* apActor, TESForm* 
     // TODO: queue check?
     if (pExtension->IsLocal() && !ScopedUnequipOverride::IsOverriden())
     {
+        spdlog::warn("foi aqui 6");
         EquipmentChangeEvent evt{};
         evt.ActorId = apActor->formID;
         evt.ItemId = apShout->formID;

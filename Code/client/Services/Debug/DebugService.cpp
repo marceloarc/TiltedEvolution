@@ -153,6 +153,7 @@ void DebugService::OnUpdate(const UpdateEvent& acUpdateEvent) noexcept
 
     if (moveData.pActor)
     {
+        
         moveData.pActor->MoveTo(moveData.pCell, moveData.position);
         moveData.pActor = nullptr;
     }
@@ -164,6 +165,10 @@ void DebugService::OnUpdate(const UpdateEvent& acUpdateEvent) noexcept
     if (GetAsyncKeyState(VK_F3) & 0x01)
     {
         m_showDebugStuff = !m_showDebugStuff;
+    }
+    if (GetAsyncKeyState(VK_F7) & 0x01)
+    {
+        g_enableCombatWindow = !g_enableCombatWindow;
     }
 
 #if (!IS_MASTER)
@@ -223,7 +228,6 @@ static bool g_enableQuestWindow{false};
 static bool g_enableCellWindow{false};
 static bool g_enableProcessesWindow{false};
 static bool g_enableWeatherWindow{false};
-static bool g_enableCombatWindow{false};
 static bool g_enableCalendarWindow{false};
 static bool g_enableDragonSpawnerWindow{false};
 
@@ -257,6 +261,9 @@ void DebugService::DrawServerView() noexcept
 void DebugService::OnDraw() noexcept
 {
     const auto view = m_world.view<FormIdComponent>();
+    if (g_enableCombatWindow)
+        DrawCombatView();
+
     if (view.empty() || !m_showDebugStuff)
         return;
 
@@ -390,8 +397,6 @@ void DebugService::OnDraw() noexcept
         DrawProcessView();
     if (g_enableWeatherWindow)
         DrawWeatherView();
-    if (g_enableCombatWindow)
-        DrawCombatView();
     if (g_enableCalendarWindow)
         DrawCalendarView();
 

@@ -55,7 +55,7 @@ float CalculateRealDamage(Actor* apHittee, float aDamage, bool aKillMove) noexce
     using TGetDifficultyMultiplier = float(int32_t, int32_t, bool);
     POINTER_SKYRIMSE(TGetDifficultyMultiplier, s_getDifficultyMultiplier, 26503);
 
-    bool isPlayer = apHittee == PlayerCharacter::Get();
+    bool isPlayer = apHittee->GetExtension()->IsPlayer();
 
     float multiplier = s_getDifficultyMultiplier(PlayerCharacter::Get()->difficulty, ActorValueInfo::kHealth, isPlayer);
 
@@ -64,6 +64,7 @@ float CalculateRealDamage(Actor* apHittee, float aDamage, bool aKillMove) noexce
     // TODO(cosideci): this seems problematic? It may not register the kill for others?
     // Disabled for now, cause this check seems to have totally broken everything, let's see what happens.
     // if (!aKillMove || multiplier < 1.0)
+
     realDamage = aDamage * multiplier;
 
     return realDamage;

@@ -1,7 +1,7 @@
 #include <Services/PlayerService.h>
 
 #include <World.h>
-
+#include <imgui.h>
 #include <Events/UpdateEvent.h>
 #include <Events/ConnectedEvent.h>
 #include <Events/DisconnectedEvent.h>
@@ -10,7 +10,9 @@
 #include <Events/PlayerDialogueEvent.h>
 #include <Events/PlayerLevelEvent.h>
 #include <Events/PartyJoinedEvent.h>
+#include <Events/MountEvent.h>
 #include <Events/PartyLeftEvent.h>
+#include <Events/ResEvent.h>
 #include <Events/BeastFormChangeEvent.h>
 
 #include <Messages/PlayerRespawnRequest.h>
@@ -19,7 +21,11 @@
 #include <Messages/EnterExteriorCellRequest.h>
 #include <Messages/EnterInteriorCellRequest.h>
 #include <Messages/PlayerDialogueRequest.h>
+#include <Messages/ResRequest.h>
+#include <Messages/NotifyRes.h>
 #include <Messages/PlayerLevelRequest.h>
+
+#include <Services/CharacterService.h>
 
 #include <Structs/ServerSettings.h>
 
@@ -31,6 +37,8 @@
 #include <AI/AIProcess.h>
 #include <EquipManager.h>
 #include <Forms/TESRace.h>
+#include <Messages/RequestActorValueChanges.h>
+#include <Messages/MountRequest.h>
 
 PlayerService::PlayerService(World& aWorld, entt::dispatcher& aDispatcher, TransportService& aTransport) noexcept
     : m_world(aWorld)
@@ -48,6 +56,8 @@ PlayerService::PlayerService(World& aWorld, entt::dispatcher& aDispatcher, Trans
     m_playerLevelConnection = m_dispatcher.sink<PlayerLevelEvent>().connect<&PlayerService::OnPlayerLevelEvent>(this);
     m_partyJoinedConnection = aDispatcher.sink<PartyJoinedEvent>().connect<&PlayerService::OnPartyJoinedEvent>(this);
     m_partyLeftConnection = aDispatcher.sink<PartyLeftEvent>().connect<&PlayerService::OnPartyLeftEvent>(this);
+    m_resConnection = m_dispatcher.sink<ResEvent>().connect<&PlayerService::OnResEvent>(this);
+    m_notifyResConnection = m_dispatcher.sink<NotifyRes>().connect<&PlayerService::OnNotifyRes>(this);
 }
 
 void PlayerService::OnUpdate(const UpdateEvent& acEvent) noexcept
@@ -100,6 +110,91 @@ void PlayerService::OnServerSettingsReceived(const ServerSettings& acSettings) n
     }
 
     ToggleDeathSystem(acSettings.DeathSystemEnabled);
+}
+
+void PlayerService::OnResEvent(const ResEvent& acEvent) const noexcept
+{
+    auto view = m_world.view<FormIdComponent>();
+
+    const auto PlayerIt = std::find_if(std::begin(view), std::end(view), [id = acEvent.PlayerId, view](auto entity) {
+        return view.get<FormIdComponent>(entity).Id == id;
+    });
+
+    if (PlayerIt == std::end(view))
+    {
+        spdlog::warn("Player not found, form id: {:X}", acEvent.PlayerId);
+        return;
+    }
+
+   const entt::entity cPlayerEntity = *PlayerIt;
+
+    std::optional<uint32_t> playerServerIdRes = Utils::GetServerId(cPlayerEntity);
+    if (!playerServerIdRes.has_value())
+    {
+        spdlog::error("{}: failed to find server id", __FUNCTION__);
+        return;
+    }
+
+    const auto TargetIt = std::find_if(std::begin(view), std::end(view), [id = acEvent.TargetId, view](auto entity) {
+        return view.get<FormIdComponent>(entity).Id == id;
+    });
+
+    if (TargetIt == std::end(view))
+    {
+        spdlog::warn("target not found, form id: {:X}", acEvent.TargetId);
+        return;
+    }
+
+    const entt::entity cTargetEntity = *TargetIt;
+
+    std::optional<uint32_t> targetServerIdRes = Utils::GetServerId(cTargetEntity);
+    if (!targetServerIdRes.has_value())
+    {
+        spdlog::error("{}: failed to find server id", __FUNCTION__);
+        return;
+    }
+
+    ResRequest request;
+    request.TargetId = targetServerIdRes.value();
+    request.PlayerId = playerServerIdRes.value();
+    m_transport.Send(request);
+}
+
+void PlayerService::OnNotifyRes(const NotifyRes& acMessage) const noexcept
+{
+    Actor* pActor = Utils::GetByServerId<Actor>(acMessage.TargetId);
+
+    if (!pActor)
+    {
+        return;
+    }
+
+    auto pPlayer = PlayerCharacter::Get();
+
+    if (pPlayer)
+    {
+        if (pActor == pPlayer)
+        {
+            FadeOutGame(true, true, 3.0f, true,0.1f);
+            pPlayer->RespawnPlayer();
+
+            m_knockdownStart = true;
+
+            // m_transport.Send(PlayerRespawnRequest());
+
+            auto* pEquipManager = EquipManager::Get();
+            TESForm* pSpell = TESForm::GetById(m_cachedMainSpellId);
+            if (pSpell)
+                pEquipManager->EquipSpell(pPlayer, pSpell, 0);
+            pSpell = TESForm::GetById(m_cachedSecondarySpellId);
+            if (pSpell)
+                pEquipManager->EquipSpell(pPlayer, pSpell, 1);
+            pSpell = TESForm::GetById(m_cachedPowerId);
+            if (pSpell)
+                pEquipManager->EquipShout(pPlayer, pSpell);
+
+        }
+    }
 }
 
 void PlayerService::OnNotifyPlayerRespawn(const NotifyPlayerRespawn& acMessage) const noexcept
@@ -199,7 +294,6 @@ void PlayerService::RunRespawnUpdates(const double acDeltaTime) noexcept
         return;
 
     static bool s_startTimer = false;
-
     PlayerCharacter* pPlayer = PlayerCharacter::Get();
     if (!pPlayer->actorState.IsBleedingOut())
     {
@@ -215,29 +309,47 @@ void PlayerService::RunRespawnUpdates(const double acDeltaTime) noexcept
     {
         s_startTimer = true;
         m_respawnTimer = 5.0;
-        FadeOutGame(true, true, 3.0f, true, 2.0f);
-
         // If a player dies not by its health reaching 0, getting it up from its bleedout state isn't possible
         // just by setting its health back to max. Therefore, put it to 0.
         if (pPlayer->GetActorValue(ActorValueInfo::kHealth) > 0.f)
             pPlayer->ForceActorValue(ActorValueOwner::ForceMode::DAMAGE, ActorValueInfo::kHealth, 0);
+
 
         pPlayer->PayCrimeGoldToAllFactions();
     }
 
     m_respawnTimer -= acDeltaTime;
 
-    if (m_respawnTimer <= 0.0)
+    const auto view = m_world.view<FormIdComponent>(entt::exclude<ObjectComponent>);
+    auto i = 0;
+    auto j = 0;
+
+    Vector<entt::entity> entities(view.begin(), view.end());
+
+    for (auto entity : entities)
     {
-        pPlayer->RespawnPlayer();
+        auto& formComponent = view.get<FormIdComponent>(entity);
+        const auto pActor = Cast<Actor>(TESForm::GetById(formComponent.Id));
 
-        m_knockdownTimer = 1.5;
+        if (pActor->GetExtension()->IsRemotePlayer())
+        {
+            i++;
+
+            if (pActor->actorState.IsBleedingOut())
+            {
+                j++;
+            }     
+        }
+    }
+
+    if (i == j)
+    {
+        FadeOutGame(true, true, 3.0f, true, 2.0f);
+        pPlayer->RespawnPlayerPos();
         m_knockdownStart = true;
-
-        m_transport.Send(PlayerRespawnRequest());
+       // m_transport.Send(PlayerRespawnRequest());
 
         s_startTimer = false;
-
         auto* pEquipManager = EquipManager::Get();
         TESForm* pSpell = TESForm::GetById(m_cachedMainSpellId);
         if (pSpell)
@@ -248,7 +360,9 @@ void PlayerService::RunRespawnUpdates(const double acDeltaTime) noexcept
         pSpell = TESForm::GetById(m_cachedPowerId);
         if (pSpell)
             pEquipManager->EquipShout(pPlayer, pSpell);
+
     }
+
 }
 
 // Doesn't seem to respawn quite yet
@@ -265,26 +379,25 @@ void PlayerService::RunPostDeathUpdates(const double acDeltaTime) noexcept
         m_knockdownTimer -= acDeltaTime;
         if (m_knockdownTimer <= 0.0)
         {
+            PlayerCharacter::Get()->SetAlpha(0.4);
             PlayerCharacter::SetGodMode(true);
             m_godmodeStart = true;
             m_godmodeTimer = 10.0;
-
             PlayerCharacter* pPlayer = PlayerCharacter::Get();
             pPlayer->currentProcess->KnockExplosion(pPlayer, &pPlayer->position, 0.f);
-
             FadeOutGame(false, true, 0.5f, true, 2.f);
-
+         
+            m_knockdownTimer = 1.0;
             m_knockdownStart = false;
         }
     }
-
     if (m_godmodeStart)
     {
         m_godmodeTimer -= acDeltaTime;
         if (m_godmodeTimer <= 0.0)
         {
-            PlayerCharacter::SetGodMode(false);
-
+            PlayerCharacter::Get()->SetAlpha(1);
+            PlayerCharacter::SetGodMode(false); 
             m_godmodeStart = false;
         }
     }

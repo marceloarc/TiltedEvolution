@@ -196,6 +196,8 @@ struct TESObjectREFR : TESForm
     void LockChange() noexcept;
 
     const float GetHeight() noexcept;
+    const float GetWidth() noexcept;
+    
     void EnableImpl() noexcept;
     OpenState GetOpenState() noexcept;
 

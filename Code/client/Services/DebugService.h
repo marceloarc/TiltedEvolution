@@ -63,6 +63,7 @@ private:
 
 public:
     bool m_showDebugStuff = false;
+    bool g_enableCombatWindow = true;
 
 private:
     entt::dispatcher& m_dispatcher;

@@ -424,7 +424,10 @@ void OverlayService::OnNotifyTeleport(const NotifyTeleport& acMessage) noexcept
             return;
         }
     }
-
+    if (PlayerCharacter::Get()->IsOnMount())
+    {
+        PlayerCharacter::Get()->Dismount();
+    }
     PlayerCharacter::Get()->MoveTo(pCell, acMessage.Position);
 }
 

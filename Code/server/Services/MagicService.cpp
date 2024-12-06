@@ -72,7 +72,7 @@ void MagicService::OnAddTargetRequest(const PacketEvent<AddTargetRequest>& acMes
 void MagicService::OnRemoveSpellRequest(const PacketEvent<RemoveSpellRequest>& acMessage) const noexcept
 {
     const auto& message = acMessage.Packet;
-    
+
     NotifyRemoveSpell notify;
     notify.TargetId = message.TargetId;
     notify.SpellId = message.SpellId;

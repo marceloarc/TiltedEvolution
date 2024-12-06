@@ -333,7 +333,7 @@ void TESObjectREFR::Disable() const noexcept
 
     PAPYRUS_FUNCTION(void, ObjectReference, Disable, bool);
 
-    s_pDisable(this, true);
+    s_pDisable(this, false);
 }
 
 void TESObjectREFR::Enable() const noexcept
@@ -342,7 +342,7 @@ void TESObjectREFR::Enable() const noexcept
 
     PAPYRUS_FUNCTION(void, ObjectReference, Enable, bool);
 
-    s_pEnable(this, true);
+    s_pEnable(this, false);
 }
 
 // Skyrim: MoveTo() can fail, causing the object to be deleted
@@ -396,6 +396,13 @@ const float TESObjectREFR::GetHeight() noexcept
     auto boundMax = GetBoundMax();
     return boundMax.z - GetBoundMin().z;
 }
+
+const float TESObjectREFR::GetWidth() noexcept
+{
+    auto boundMax = GetBoundMax();
+    return boundMax.x - GetBoundMin().x;
+}
+
 
 TESObjectREFR::OpenState TESObjectREFR::GetOpenState() noexcept
 {

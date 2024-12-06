@@ -322,7 +322,7 @@ void CoreStubsInit()
     // TODO(Vince): we need some check if usvfs already fucked with this?
     // MH_CreateHookApi(L"ntdll.dll", "LdrGetDllFullName", &TP_LdrGetDllFullName, (void**)&RealLdrGetDllFullName);
     VALIDATE(MH_CreateHookApi(L"ntdll.dll", "LdrLoadDll", &TP_LdrLoadDll, (void**)&RealLdrLoadDll));
-
+    
     // Starting with Windows 11 24H2 the call stack has changed and GetModuleHandle() no longer
     // downcalls to LdrGetDllHandleEx, so we have to hook this too.
     VALIDATE(MH_CreateHookApi(L"kernel32.dll", "GetModuleHandleW", &TP_GetModuleHandleW, (void**)&RealGetModuleHandleW));

@@ -143,6 +143,7 @@ void Actor::SetSpeed(float aSpeed) noexcept
     animationGraphHolder.SetVariableFloat(&speedSampledStr, aSpeed);
 }
 
+
 uint16_t Actor::GetLevel() const noexcept
 {
     TP_THIS_FUNCTION(TGetLevel, uint16_t, const Actor);
@@ -156,6 +157,7 @@ void Actor::ForcePosition(const NiPoint3& acPosition) noexcept
 
     // It just works TM
     SetPosition(acPosition, true);
+    
 }
 
 void Actor::QueueUpdate() noexcept
@@ -178,7 +180,7 @@ GamePtr<Actor> Actor::Create(TESNPC* apBaseForm) noexcept
     // Prevent saving
     pActor->SetSkipSaveFlag(true);
     pActor->GetExtension()->SetRemote(true);
-
+    
     const auto pPlayer = static_cast<Actor*>(GetById(0x14));
     auto pCell = pPlayer->parentCell;
     const auto pWorldSpace = pPlayer->GetWorldSpace();
@@ -320,6 +322,30 @@ bool Actor::IsInCombat() const noexcept
     return s_pIsInCombat(this);
 }
 
+bool Actor::IsOnMount() const noexcept
+{
+    PAPYRUS_FUNCTION(bool, Actor, IsOnMount);
+    return s_pIsOnMount(this);
+}
+
+bool Actor::IsWeaponDrawn() const noexcept
+{
+    PAPYRUS_FUNCTION(bool, Actor, IsWeaponDrawn);
+    return s_pIsWeaponDrawn(this);
+}
+
+bool Actor::IsAIEnabled() const noexcept
+{
+    PAPYRUS_FUNCTION(bool, Actor, IsAIEnabled);
+    return s_pIsAIEnabled(this);
+}
+
+bool Actor::Dismount() noexcept
+{
+    PAPYRUS_FUNCTION(bool, Actor, Dismount);
+    return s_pDismount(this);
+}
+
 Actor* Actor::GetCombatTarget() const noexcept
 {
     PAPYRUS_FUNCTION(Actor*, Actor, GetCombatTarget);
@@ -354,6 +380,25 @@ void Actor::StopCombat() noexcept
     PAPYRUS_FUNCTION(void, Actor, StopCombat);
     s_pStopCombat(this);
 }
+
+void Actor::EnableAI(bool aSet) noexcept
+{
+    PAPYRUS_FUNCTION(void, Actor, EnableAI, bool);
+    s_pEnableAI(this, aSet);
+}
+
+void Actor::SetDontMove(bool aSet) noexcept
+{
+    PAPYRUS_FUNCTION(void, Actor, SetDontMove, bool);
+    s_pSetDontMove(this, aSet);
+}
+
+void Actor::SetAlpha(float afTargetAlpha, bool abFade) noexcept
+{
+    PAPYRUS_FUNCTION(void, Actor, SetAlpha, float, bool);
+    s_pSetAlpha(this,afTargetAlpha, abFade);
+}
+
 
 bool Actor::RemoveSpell(MagicItem* apSpell) noexcept
 {
@@ -783,11 +828,25 @@ void Actor::UnEquipAll() noexcept
     }
 }
 
+void Actor::DrawWeapon() noexcept
+{
+    PAPYRUS_FUNCTION(void, Actor, DrawWeapon);
+
+    s_pDrawWeapon(this);
+}
+
 void Actor::RemoveFromAllFactions() noexcept
 {
     PAPYRUS_FUNCTION(void, Actor, RemoveFromAllFactions);
 
     s_pRemoveFromAllFactions(this);
+}
+
+void Actor::EvaluatePackage() noexcept
+{
+    PAPYRUS_FUNCTION(void, Actor, EvaluatePackage);
+
+    s_pEvaluatePackage(this);
 }
 
 TP_THIS_FUNCTION(TInitiateMountPackage, bool, Actor, Actor* apMount);
@@ -833,10 +892,10 @@ void Actor::Kill() noexcept
     KillImpl(nullptr, 100.f, true, true);
 
     // Papyrus kill will not go through if it is queued by a kill move
-    /*
-    PAPYRUS_FUNCTION(void, Actor, Kill, void*);
-    s_pKill(this, NULL);
-    */
+
+    // PAPYRUS_FUNCTION(void, Actor, Kill, void*);
+    // s_pKill(this, NULL);
+
 }
 
 void Actor::Reset() noexcept
@@ -959,6 +1018,7 @@ static TDamageActor* RealDamageActor = nullptr;
 // TODO: this is flawed, since it does not account for invulnerable actors
 bool TP_MAKE_THISCALL(HookDamageActor, Actor, float aDamage, Actor* apHitter, bool aKillMove)
 {
+   
     if (apHitter)
         World::Get().GetRunner().Trigger(HitEvent(apHitter->formID, apThis->formID));
 
@@ -966,16 +1026,29 @@ bool TP_MAKE_THISCALL(HookDamageActor, Actor, float aDamage, Actor* apHitter, bo
 
     float currentHealth = apThis->GetActorValue(ActorValueInfo::kHealth);
     bool wouldKill = (currentHealth - realDamage) <= 0.f;
+    float newHealth = (currentHealth - realDamage);
+
 
     const auto* pExHittee = apThis->GetExtension();
     if (pExHittee->IsLocalPlayer())
     {
-        if (!World::Get().GetServerSettings().PvpEnabled)
+
+        if (apHitter && apHitter->GetExtension()->IsRemotePlayer())
         {
-            if (apHitter && apHitter->GetExtension()->IsRemotePlayer())
+            if (!World::Get().GetServerSettings().PvpEnabled)
+            {
                 return false;
+            }        
+        }
+        if (wouldKill)
+        {
+            realDamage = currentHealth;
         }
 
+        if (currentHealth <= 0.f)
+        {
+            realDamage = 0;
+        }
         World::Get().GetRunner().Trigger(HealthChangeEvent(apThis->formID, -realDamage));
         return TiltedPhoques::ThisCall(RealDamageActor, apThis, aDamage, apHitter, aKillMove);
     }
@@ -987,6 +1060,7 @@ bool TP_MAKE_THISCALL(HookDamageActor, Actor, float aDamage, Actor* apHitter, bo
     if (apHitter)
     {
         const auto* pExHitter = apHitter->GetExtension();
+
         if (pExHitter->IsLocalPlayer())
         {
             World::Get().GetRunner().Trigger(HealthChangeEvent(apThis->formID, -realDamage));
@@ -994,8 +1068,10 @@ bool TP_MAKE_THISCALL(HookDamageActor, Actor, float aDamage, Actor* apHitter, bo
         }
         if (pExHitter->IsRemotePlayer())
         {
+
             return wouldKill;
         }
+
     }
 
     if (pExHittee->IsLocal())

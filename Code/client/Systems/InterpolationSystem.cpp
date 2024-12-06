@@ -42,9 +42,9 @@ void InterpolationSystem::Update(Actor* apActor, InterpolationComponent& aInterp
 
     aInterpolationComponent.Position = position;
 
-    // Don't try to move a null actor
     if (!apActor)
         return;
+
 
     apActor->ForcePosition(position);
     apActor->LoadAnimationVariables(second.Variables);

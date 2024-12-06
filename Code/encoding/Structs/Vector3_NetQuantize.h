@@ -23,13 +23,16 @@ struct Vector3_NetQuantize : glm::vec3
      * @param aReader Reader wrapping the buffer.
      */
     void Deserialize(Buffer::Reader& aReader) noexcept;
+
     /**
      * Packs the vector into a 64 bits representation of the network vector
      */
-    [[nodiscard]] uint64_t Pack() const noexcept;
+    std::pair<uint64_t, uint32_t> Pack() const noexcept;
+
     /**
+        std::pair<uint64_t, uint8_t> Pack() const noexcept;
      * Unpack a 64 bits representation of a network vector
      * @param aValue The 64bits representation of a vector.
      */
-    void Unpack(uint64_t aValue) noexcept;
+    void Unpack(uint64_t dataLow, uint32_t dataHigh) noexcept;
 };

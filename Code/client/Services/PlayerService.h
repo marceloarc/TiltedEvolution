@@ -12,9 +12,11 @@ struct CellChangeEvent;
 struct PlayerDialogueEvent;
 struct PlayerLevelEvent;
 struct PartyJoinedEvent;
+struct ResEvent;
 struct PartyLeftEvent;
 
 struct NotifyPlayerRespawn;
+struct NotifyRes;
 
 /**
  * @brief Handles logic related to the local player.
@@ -35,6 +37,8 @@ protected:
     void OnGridCellChangeEvent(const GridCellChangeEvent& acEvent) const noexcept;
     void OnCellChangeEvent(const CellChangeEvent& acEvent) const noexcept;
     void OnPlayerDialogueEvent(const PlayerDialogueEvent& acEvent) const noexcept;
+    void OnResEvent(const ResEvent& acEvent) const noexcept;
+    void OnNotifyRes(const NotifyRes& acMessage) const noexcept;
     void OnPlayerLevelEvent(const PlayerLevelEvent& acEvent) const noexcept;
     void OnPartyJoinedEvent(const PartyJoinedEvent& acEvent) noexcept;
     void OnPartyLeftEvent(const PartyLeftEvent& acEvent) noexcept;
@@ -64,11 +68,12 @@ private:
 
     bool m_isDeathSystemEnabled = true;
 
-    bool m_knockdownStart = false;
-    double m_knockdownTimer = 0.0;
+    mutable bool m_knockdownStart = false;
+    double m_knockdownTimer = 1.0;
 
     bool m_godmodeStart = false;
-    double m_godmodeTimer = 0.0;
+    double m_godmodeTimer = 3.0;
+    double m_anotherTimer = 5.0;
 
     uint32_t m_cachedMainSpellId = 0;
     uint32_t m_cachedSecondarySpellId = 0;
@@ -80,6 +85,8 @@ private:
     entt::scoped_connection m_settingsConnection;
     entt::scoped_connection m_notifyRespawnConnection;
     entt::scoped_connection m_gridCellChangeConnection;
+    entt::scoped_connection m_notifyResConnection;
+    entt::scoped_connection m_resConnection;
     entt::scoped_connection m_cellChangeConnection;
     entt::scoped_connection m_playerDialogueConnection;
     entt::scoped_connection m_playerLevelConnection;

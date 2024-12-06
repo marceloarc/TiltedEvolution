@@ -14,21 +14,21 @@ namespace
 void SetTiltedImStyle()
 {
     // cherry colors, 3 intensities
-#define HI(v) ImVec4(0.502f, 0.075f, 0.256f, v)
-#define MED(v) ImVec4(0.455f, 0.198f, 0.301f, v)
-#define LOW(v) ImVec4(0.232f, 0.201f, 0.271f, v)
+#define HI(v) ImVec4(0.0f, 0.0f, 0.0f, 0.5)  // Preto com transparência 'v'
+#define MED(v) ImVec4(0.0f, 0.0f, 0.0f, 0.5) // Preto com transparência 'v'
+#define LOW(v) ImVec4(0.0f, 0.0f, 0.0f, 0.5)
 // backgrounds (@todo: complete with BG_MED, BG_LOW)
-#define BG(v) ImVec4(0.200f, 0.220f, 0.270f, v)
+#define BG(v) ImVec4(0.0f, 0.0f, 0.0f, 0.5)
 // text
 #define TEXT(v) ImVec4(0.860f, 0.930f, 0.890f, v)
 
     auto& style = ImGui::GetStyle();
     style.Colors[ImGuiCol_Text] = TEXT(0.78f);
     style.Colors[ImGuiCol_TextDisabled] = TEXT(0.28f);
-    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.13f, 0.14f, 0.17f, 1.00f);
+    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.5);
     style.Colors[ImGuiCol_ChildBg] = BG(0.58f);
     style.Colors[ImGuiCol_PopupBg] = BG(0.9f);
-    style.Colors[ImGuiCol_Border] = ImVec4(0.31f, 0.31f, 1.00f, 0.00f);
+    style.Colors[ImGuiCol_Border] = ImVec4(0.3843f, 0.4f, 0.4078f, 1.0f);
     style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     style.Colors[ImGuiCol_FrameBg] = BG(1.00f);
     style.Colors[ImGuiCol_FrameBgHovered] = MED(0.78f);
@@ -74,10 +74,15 @@ void SetTiltedImStyle()
     style.GrabRounding = 2.0f;
 
     style.WindowTitleAlign.x = 0.50f;
-
-    style.Colors[ImGuiCol_Border] = ImVec4(0.539f, 0.479f, 0.255f, 0.162f);
+    style.ChildRounding = 8.0f;
+    style.Colors[ImGuiCol_Border] = ImVec4(0.3843f, 0.4f, 0.4078f, 1.0f);
     style.FrameBorderSize = 0.0f;
-    style.WindowBorderSize = 1.0f;
+    style.WindowBorderSize = 2.0f;
+    style.TabRounding = 8.f;
+    style.FrameRounding = 8.f;
+    style.GrabRounding = 8.f;
+    style.WindowRounding = 8.f;
+    style.PopupRounding = 8.f;
 }
 } // namespace
 

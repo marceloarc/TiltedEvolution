@@ -1,14 +1,21 @@
 #include <Services/DebugService.h>
 #include <imgui.h>
 #include <inttypes.h>
-
+#include <PlayerCharacter.h>
+#include <Services/PlayerService.h>
 #include <Combat/CombatController.h>
+#include <Games/ActorExtension.h>
+#include <Forms/TESObjectCELL.h>
 #include <Combat/CombatGroup.h>
 #include <Combat/CombatTargetSelector.h>
 #include <Games/Misc/BGSWorldLocation.h>
 #include <Combat/CombatInventory.h>
+#include <Events/ResEvent.h>
 
 #include <math.h>
+#include "ComponentView.cpp"
+#include <TimeManager.h>
+#include <Messages/RequestOwnershipClaim.h>
 
 namespace
 {
@@ -175,51 +182,269 @@ float CalculateTargetScore(CombatTargetSelector* apThis, CombatTarget* apCombatT
 }
 } // namespace
 
+static float progress = 0.0f;
+static float elapsedTime = 0.0f;
+static float accumulatedTime = 0.0f;
+static float accumulatedTime2 = 0.0f;
+uint32 cellid = 0;
 void DebugService::DrawCombatView()
 {
-    if (!m_formId)
-        return;
 
-    ImGui::Begin("Combat");
+    // Obt�m o tempo delta do frame atual
+    float deltaTime = ImGui::GetIO().DeltaTime;
 
-    ImGui::InputScalar("Form ID", ImGuiDataType_U32, (void*)&m_formId, nullptr, nullptr, "%" PRIx32, ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_CharsHexadecimal);
+    // Acumula o tempo decorrido
+    accumulatedTime += deltaTime;
+    accumulatedTime2 += deltaTime;
 
-    Actor* pActor = Cast<Actor>(TESForm::GetById(m_formId));
-
-    if (pActor && pActor->pCombatController && pActor->pCombatController->pCombatGroup && pActor->pCombatController->pActiveTargetSelector)
+    auto player = PlayerCharacter::Get();
+    if (player)
     {
-        Actor* pTarget = Cast<Actor>(TESObjectREFR::GetByHandle(pActor->pCombatController->targetHandle));
-        if (pTarget)
+        //auto pGameTime = TimeData::Get();
+
+        //auto hour = pGameTime->GameHour->f;
+        //int hours = static_cast<int>(hour); // Parte inteira (horas)
+        //float decimalPart = hour - hours;   // Parte decimal
+        //int minutes = std::round(decimalPart * 60);
+        const auto view = m_world.view<FormIdComponent>(entt::exclude<ObjectComponent>);
+        auto i = 0;
+        Vector<entt::entity> entities(view.begin(), view.end());
+
+        if (accumulatedTime2 >= 3)
         {
-            uint32_t targetFormID = pTarget->formID;
-            ImGui::InputScalar("Current target ID", ImGuiDataType_U32, (void*)&targetFormID, nullptr, nullptr, "%" PRIx32, ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_CharsHexadecimal);
+            for (auto entity : entities)
+            {
+                auto& formIdComponent = view.get<FormIdComponent>(entity);
+                auto* pForm = TESForm::GetById(formIdComponent.Id);
+                auto* pActor = Cast<Actor>(pForm);
+
+                if (!pActor)
+                {
+                    continue;
+                }
+
+                if (!pActor->GetExtension()->IsPlayer() and !pActor->IsPlayerSummon() and !pActor->IsTemporary() and !pActor->IsDead())
+                {
+
+                    if (pActor->GetExtension()->IsLocal())
+                    {
+                        if (const auto pLocalComponent = m_world.try_get<LocalComponent>(entity))
+                        {
+                            auto& action = pLocalComponent->CurrentAction;
+
+                            if (action.EventName == "Unequip")
+                            {
+                                pActor->Reset();
+                            }
+                        }
+                    }
+                    if (pActor->GetExtension()->IsRemote())
+                    {
+                        if (auto* pComponent = m_world.try_get<RemoteAnimationComponent>(entity))
+                        {
+                            if (pComponent->LastRanAction.EventName == "Unequip")
+                            {
+                                pActor->Reset();
+                            }
+                        }    
+                    }
+                }
+
+            }
+            accumulatedTime2 = 0;
         }
 
-        BGSEncounterZone* pZone = GetLocationEncounterZone(pActor);
-
-        ImGui::BeginChild("Potential targets", ImVec2(0, 200), true);
-
-        auto& targets = pActor->pCombatController->pCombatGroup->targets;
-        for (int i = 0; i < targets.length; i++)
+        for (auto entity : entities)
         {
-            auto& target = targets[i];
-            Actor* pTarget = Cast<Actor>(TESObjectREFR::GetByHandle(target.targetHandle));
-            if (pTarget)
+            i++;
+
+            auto& formIdComponent = view.get<FormIdComponent>(entity);
+            auto* pForm = TESForm::GetById(formIdComponent.Id);
+            auto* pActor = Cast<Actor>(pForm);
+
+            if (!pActor)
             {
-                const uint32_t formID = pTarget->formID;
-                ImGui::InputScalar("Form ID", ImGuiDataType_U32, (void*)&formID, nullptr, nullptr, "%" PRIx32, ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_CharsHexadecimal);
-
-                float score =
-                    CalculateTargetScore(pActor->pCombatController->pActiveTargetSelector, &target, pActor, pTarget, pZone);
-
-                ImGui::InputFloat("Score", &score, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_ReadOnly);
+                continue;
             }
 
-            ImGui::Separator();
+            if (!pActor->GetExtension()->IsPlayer() and !pActor->IsDead())
+            {
+                if (player->GetCombatTarget() == pActor or pActor->IsDragon())
+                {
+                    if (auto* pObject = Cast<TESObjectREFR>(TESForm::GetById(view.get<FormIdComponent>(entity).Id)))
+                    {
+                        ImVec2 screenPos{};
+                        auto playerPosition = player->position;
+                        auto actorPosition = pActor->position;
+                        float dx = actorPosition.x - playerPosition.x;
+                        float dy = actorPosition.y - playerPosition.y;
+                        float dz = actorPosition.z - playerPosition.z;
+                        auto distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+                        float minDistance = 10.0f;   
+                        float maxDistance = 7000.0f; 
+                        float maxScale = 1.0f;       
+                        float minScale = 0.1f;    
+                        float scale = maxScale - (distance - minDistance) / (maxDistance - minDistance) * (maxScale - minScale);
+
+                        scale = std::clamp(scale, minScale, maxScale);
+                        ImVec2 elementSize = ImVec2(100.0f * scale, 5.0f * scale);
+                        if (DrawInWorldSpaceHeight(pObject, screenPos, elementSize))
+                        {
+                            std::string windowName = "EnemyHealth" + std::to_string(i);
+                            ImGui::SetNextWindowPos(screenPos);
+                            ImGui::Begin(windowName.c_str(), nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize);
+
+                            float currentHealth = pActor->GetActorValue(ActorValueInfo::kHealth);
+                            float maxHealth = pActor->GetActorPermanentValue(ActorValueInfo::kHealth);
+
+                            ImGui::SetWindowFontScale(scale);
+                            ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+                            float healthPercentage = currentHealth / maxHealth;
+                            if (!pActor->baseForm)
+                            {
+                                ImGui::TextColored(color, "No-Name");
+                            }
+                            else
+                            {
+                                ImGui::TextColored(color,pActor->baseForm->GetName());
+                            }
+                            ImVec4 histoColor = ImVec4(0.522f, 0.106f, 0.106f, 1.0f);
+                            if (pActor->IsPlayerSummon())
+                            {
+                                histoColor = ImVec4(0.18, 0.541, 0.357, 1.0f);
+                            }
+                            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, histoColor);
+
+                            ImGui::ProgressBar(healthPercentage, elementSize, "");
+                            ImGui::PopStyleColor(); 
+      
+                            ImGui::End();
+                        }
+                    }
+                }
+            }
+
+            if (pActor->GetExtension()->IsPlayer() and !pActor->GetExtension()->IsLocalPlayer())
+            {
+                if (IsFleeing(pActor))
+                {
+                    spdlog::warn("ala o mano ta correno");
+                }
+                pActor->SetActorValue(ActorValueInfo::kCombatHealthRegenMult, 0.0);
+              
+                if (auto* pObject = Cast<TESObjectREFR>(TESForm::GetById(view.get<FormIdComponent>(entity).Id)))
+                {
+                    ImVec2 screenPos{};
+                    auto playerPosition = player->position;
+                    auto actorPosition = pActor->position;
+                    float dx = actorPosition.x - playerPosition.x;
+                    float dy = actorPosition.y - playerPosition.y;
+                    float dz = actorPosition.z - playerPosition.z;
+                    auto distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+                    float minDistance = 10.0f;   
+                    float maxDistance = 7000.0f; 
+                    float maxScale = 1.0f;      
+                    float minScale = 0.1f;      
+                    float scale = maxScale - (distance - minDistance) / (maxDistance - minDistance) * (maxScale - minScale);
+
+                    scale = std::clamp(scale, minScale, maxScale);
+                    ImVec2 elementSize = ImVec2(100.0f*scale, 5.0f * scale);
+                    if (DrawInWorldSpaceHeight(pObject, screenPos,elementSize))
+                    {
+                        ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+                        if (pActor->actorState.IsBleedingOut())
+                        {
+                            color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+                        }
+                        ImGui::SetNextWindowPos(screenPos);
+                        std::string windowName = "PlayerName" + std::to_string(i);
+                        ImGui::Begin(windowName.c_str(), nullptr,
+                                     ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar |
+                                         ImGuiWindowFlags_AlwaysAutoResize);
+
+                        ImGui::SetWindowFontScale(scale);
+                        ImGui::SetWindowSize(ImVec2(ImGui::GetWindowWidth(), 100));
+                        ImGui::TextColored(color, pActor->baseForm->GetName());
+                        ImGui::SameLine(); 
+                        int level = pActor->GetLevel();
+                        std::string levelText = "Lv. " + std::to_string(level);
+                        ImGui::TextColored(color, levelText.c_str());
+                        ImGui::SetWindowFontScale(scale);
+                        float currentHealth = pActor->GetActorValue(ActorValueInfo::kHealth);
+                        float maxHealth = pActor->GetActorPermanentValue(ActorValueInfo::kHealth);
+                        float healthPercentage = currentHealth / maxHealth;
+                        ImGui::SetWindowFontScale(0.8f);
+                        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.18, 0.541, 0.357, 1.0f));
+
+                        ImGui::ProgressBar(healthPercentage, elementSize, "");
+                        ImGui::PopStyleColor();
+                        ImGui::End();
+                    }
+                }
+
+                if (pActor->actorState.IsBleedingOut() and !player->actorState.IsBleedingOut())
+                {
+
+                    auto playerPosition = player->position;
+                    auto actorPosition = pActor->position;
+                    float dx = actorPosition.x - playerPosition.x;
+                    float dy = actorPosition.y - playerPosition.y;
+                    float dz = actorPosition.z - playerPosition.z;
+                    auto distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+                    if (distance < 200)
+                    {
+                        if (auto* pObject = Cast<TESObjectREFR>(TESForm::GetById(view.get<FormIdComponent>(entity).Id)))
+                        {
+                            ImVec2 screenPos{};
+                            if (DrawInWorldSpace(pObject, screenPos))
+                            {
+                                if (GetAsyncKeyState(0x45) & 0x8000)
+                                {
+                                    elapsedTime += ImGui::GetIO().DeltaTime;
+                                    progress = elapsedTime / 2.0f;
+                                    if (progress >= 1.0f) 
+                                    {
+                                        progress = 0.0f;
+                                        World::Get().GetRunner().Trigger(ResEvent(pActor->formID, player->formID));
+                                    }
+
+
+                                    ImGui::SetNextWindowPos(screenPos);
+                                    std::string windowName = "revive" + std::to_string(i);
+                                    ImGui::Begin(windowName.c_str(), nullptr,
+                                                 ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar |
+                                                     ImGuiWindowFlags_AlwaysAutoResize);
+                                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.18, 0.541, 0.357, 1.0f));
+                                    ImGui::ProgressBar(progress, ImVec2(200.0f, 20.0f), "Revivendo...");
+                                    ImGui::PopStyleColor(); 
+                                    ImGui::End();
+                                }
+                                else
+                                {
+                                    progress = 0.0f;
+                                    elapsedTime = 0.0f;
+                                    ImGui::SetNextWindowPos(screenPos);
+                                    std::string windowName = "reviveprompt" + std::to_string(i);
+                                    ImGui::Begin(windowName.c_str(), nullptr,
+                                                    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize);
+                                    ImGui::Text("Segure E para ressuscitar");
+                                    ImGui::End();
+                                }
+
+                            }
+                        }
+                    }
+                    else
+                    {
+                        progress = 0.0f;
+                        elapsedTime = 0.0f;
+                    }
+                }
+            }
         }
-
-        ImGui::EndChild();
+        
+    
     }
-
-    ImGui::End();
 }

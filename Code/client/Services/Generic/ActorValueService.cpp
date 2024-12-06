@@ -61,7 +61,7 @@ void ActorValueService::OnLocalComponentAdded(entt::registry& aRegistry, const e
     {
         auto& localComponent = aRegistry.get<LocalComponent>(aEntity);
         localComponent.IsDead = pActor->IsDead();
-        localComponent.IsWeaponDrawn = pActor->actorState.IsWeaponDrawn();
+        localComponent.IsWeaponDrawn = pActor->IsWeaponDrawn();
         CreateActorValuesComponent(aEntity, pActor);
     }
 }
@@ -321,7 +321,7 @@ void ActorValueService::OnActorValueChanges(const NotifyActorValueChanges& acMes
     for (const auto& [key, value] : acMessage.Values)
     {
         // Syncing dragon souls triggers "Dragon soul collected" event
-        if (key == ActorValueInfo::kDragonSouls || key == ActorValueInfo::kHealth)
+        if (key == ActorValueInfo::kDragonSouls)
             continue;
 
         spdlog::debug("Actor value update, server ID: {:X}, key: {}, value: {}", acMessage.Id, key, value);
@@ -381,6 +381,8 @@ void ActorValueService::OnDeathStateChange(const NotifyDeathStateChange& acMessa
     if (pExtension->IsPlayer())
         return;
 
+
     if (pActor->IsDead() != acMessage.IsDead)
         acMessage.IsDead ? pActor->Kill() : pActor->Respawn();
+
 }

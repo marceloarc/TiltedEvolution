@@ -115,7 +115,8 @@ struct PlayerCharacter : Actor
     float GetSkillExperience(Skills::Skill aSkill) const noexcept { return (*pSkills)->skills[aSkill].xp; }
 
     NiPoint3 RespawnPlayer() noexcept;
-
+    NiPoint3 RespawnPlayerPos() noexcept;
+    
     void PayCrimeGoldToAllFactions() noexcept;
 
     void SetWaypoint(NiPoint3* apPosition, TESWorldSpace* apWorldSpace) noexcept;

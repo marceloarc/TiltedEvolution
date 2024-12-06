@@ -90,6 +90,7 @@ struct CharacterService
     void OnPartyJoinedEvent(const PartyJoinedEvent& acEvent) noexcept;
 
     void ProcessNewEntity(entt::entity aEntity) const noexcept;
+    void ProcessNewEntityTargeted(entt::entity aEntity) const noexcept;
 
 private:
     void MoveActor(const Actor* apActor, const GameId& acWorldSpaceId, const GameId& acCellId, const Vector3_NetQuantize& acPosition) const noexcept;
@@ -113,7 +114,7 @@ private:
     TransportService& m_transport;
 
     float m_cachedExperience = 0.f;
-
+    double m_anotherTimer = 5.0;
     // TODO: revamp this, read the local anim var like vampire lord?
     struct WeaponDrawData
     {
@@ -124,6 +125,7 @@ private:
         }
 
         double m_timer = 0.0;
+
         bool m_drawWeapon = false;
         bool m_isFirstPass = true;
     };

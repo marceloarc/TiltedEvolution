@@ -140,6 +140,7 @@ bool CharacterService::TakeOwnership(const uint32_t acFormId, const uint32_t acS
         return false;
     }
 
+
     pExtension->SetRemote(false);
 
     // TODO(cosideci): this should be done differently.
@@ -187,6 +188,7 @@ void CharacterService::OnActorAdded(const ActorAddedEvent& acEvent) noexcept
             auto& remoteComponent = view.get<RemoteComponent>(entity);
             return remoteComponent.CachedRefId == acEvent.FormId;
         });
+
 
     if (it != std::end(view))
     {
@@ -332,7 +334,6 @@ void CharacterService::OnAssignCharacter(const AssignCharacterResponse& acMessag
         spdlog::info("Received remote actor, form id: {:X}, isweapondrawn: {}", pActor->formID, acMessage.IsWeaponDrawn);
 
         m_world.emplace_or_replace<RemoteComponent>(cEntity, acMessage.ServerId, formIdComponent->Id);
-
         pActor->GetExtension()->SetRemote(true);
 
         InterpolationSystem::Setup(m_world, cEntity);
@@ -347,6 +348,7 @@ void CharacterService::OnAssignCharacter(const AssignCharacterResponse& acMessag
         m_weaponDrawUpdates[pActor->formID] = {acMessage.IsWeaponDrawn};
 
         MoveActor(pActor, acMessage.WorldSpaceId, acMessage.CellId, acMessage.Position);
+
     }
 }
 
@@ -437,6 +439,7 @@ void CharacterService::OnCharacterSpawn(const CharacterSpawnRequest& acMessage) 
         pActor->Enable();
 
     pActor->GetExtension()->SetRemote(true);
+    
 
     pActor->rotation.x = acMessage.Rotation.x;
     pActor->rotation.z = acMessage.Rotation.y;
@@ -446,6 +449,11 @@ void CharacterService::OnCharacterSpawn(const CharacterSpawnRequest& acMessage) 
     pActor->GetExtension()->SetPlayer(acMessage.IsPlayer);
     if (acMessage.IsPlayer)
     {
+        if (PlayerCharacter::Get()->IsOnMount())
+        {
+            PlayerCharacter::Get()->Dismount();
+        }
+
         pActor->SetIgnoreFriendlyHit(true);
         pActor->SetPlayerRespawnMode();
         m_world.emplace_or_replace<PlayerComponent>(*entity, acMessage.PlayerId);
@@ -459,6 +467,7 @@ void CharacterService::OnCharacterSpawn(const CharacterSpawnRequest& acMessage) 
     if (acMessage.IsPlayerSummon)
     {
         // Prevents remote summons agroing other players.
+
         pActor->SetCommandingActor(PlayerCharacter::Get()->GetHandle());
     }
 
@@ -515,6 +524,7 @@ void CharacterService::OnRemoteSpawnDataReceived(const NotifySpawnData& acMessag
     if (pActor->IsDead() != acMessage.NewActorData.IsDead)
         acMessage.NewActorData.IsDead ? pActor->Kill() : pActor->Respawn();
 
+ 
     spdlog::info("Applied remote spawn data, actor form id: {:X}", pActor->formID);
 }
 
@@ -536,7 +546,9 @@ void CharacterService::OnReferencesMoveRequest(const ServerReferencesMoveRequest
         InterpolationComponent::TimePoint point;
         point.Tick = acMessage.Tick;
         point.Position = movement.Position;
-        point.Rotation = {movement.Rotation.x, 0.f, movement.Rotation.y};
+        point.Rotation.x = movement.Rotation.x;
+        point.Rotation.y = 0.f;
+        point.Rotation.z = movement.Rotation.y;
         point.Variables = movement.Variables;
         point.Direction = movement.Direction;
 
@@ -631,12 +643,21 @@ void CharacterService::OnRemoveCharacter(const NotifyRemoveCharacter& acMessage)
 void CharacterService::OnNotifyRespawn(const NotifyRespawn& acMessage) const noexcept
 {
     auto view = m_world.view<FormIdComponent, RemoteComponent>();
-    const auto entityIt = std::find_if(view.begin(), view.end(), [view, id = acMessage.ActorId](auto aEntity) { return view.get<RemoteComponent>(aEntity).Id == id; });
+    auto entityIt = std::find_if(view.begin(), view.end(), [view, id = acMessage.ActorId](auto aEntity) { return view.get<RemoteComponent>(aEntity).Id == id; });
 
     if (entityIt == view.end())
     {
-        spdlog::error("Actor to respawn not found in: {:X}", acMessage.ActorId);
-        return;
+
+        Actor* pActor = Utils::GetByServerId<Actor>(acMessage.ActorId);
+
+        if(!pActor){
+            spdlog::error("Actor to respawn not found in: {:X}", acMessage.ActorId);
+             return;
+        }
+
+        entityIt = std::find_if(view.begin(), view.end(), [view, id = pActor->formID](auto aEntity) {
+            return view.get<RemoteComponent>(aEntity).Id == id;
+        });
     }
 
     const auto cId = *entityIt;
@@ -675,12 +696,19 @@ void CharacterService::OnBeastFormChange(const BeastFormChangeEvent& acEvent) co
     request.ActorId = serverId;
 
     Actor* pActor = Utils::GetByServerId<Actor>(serverId);
+
     if (!pActor)
+    { // Verifica se o ator n�o foi encontrado
+        spdlog::warn(__FUNCTION__ ": could not find actor server id {:X}", serverId);
         return;
+    }
 
     TESNPC* pNpc = Cast<TESNPC>(pActor->baseForm);
     if (!pNpc)
+    {
+        spdlog::warn(__FUNCTION__ ": could not find actor server id {:X}", serverId);
         return;
+    }
 
     pNpc->Serialize(&request.AppearanceBuffer);
     request.ChangeFlags = pNpc->GetChangeFlags();
@@ -728,6 +756,10 @@ void CharacterService::OnMountEvent(const MountEvent& acEvent) const noexcept
 
     if (m_world.try_get<RemoteComponent>(cMountEntity))
         TakeOwnership(acEvent.MountID, *mountServerIdRes, cMountEntity);
+    TESForm* playerform = TESForm::GetById(acEvent.RiderID);
+    auto player = Cast<Actor>(playerform);
+
+
 
     MountRequest request;
     request.MountId = mountServerIdRes.value();
@@ -786,10 +818,37 @@ void CharacterService::OnNotifyMount(const NotifyMount& acMessage) const noexcep
             InterpolationSystem::Setup(m_world, entity);
             AnimationSystem::Setup(m_world, entity);
 
+            if (pMount)
+            {
+                auto time = 500;
+
+                if (pRider->IsWeaponDrawn())
+                {
+                    auto pRightWeapon = pRider->GetEquippedWeapon(1);
+
+                    uint32_t rightId = pRightWeapon ? pRightWeapon->formID : 0;
+                    if (rightId != 0)
+                    {
+                        time = 3000;
+                    }
+                }
+
+                std::thread([pMount,time]() {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(time));
+                    if (pMount->IsPlayerSummon()) 
+                    {
+                      pMount->SetAlpha(0.4);
+                    }
+                    else
+                    {
+                        pMount->Reset();
+                    }
+                }).detach();
+            }
+        
             break;
         }
     }
-
     pRider->InitiateMountPackage(pMount);
 }
 
@@ -1000,6 +1059,7 @@ void CharacterService::OnNotifyRelinquishControl(const NotifyRelinquishControl& 
             }
 
             pActor->GetExtension()->SetRemote(true);
+            
 
             InterpolationSystem::Setup(m_world, entity);
             AnimationSystem::Setup(m_world, entity);
@@ -1086,6 +1146,8 @@ void CharacterService::ProcessNewEntity(entt::entity aEntity) const noexcept
         return;
     }
 
+
+
     if (auto* pRemoteComponent = m_world.try_get<RemoteComponent>(aEntity); pRemoteComponent)
     {
         // TODO(cosideci): don't just take all actors (i.e. from other parties),
@@ -1098,6 +1160,46 @@ void CharacterService::ProcessNewEntity(entt::entity aEntity) const noexcept
         }
         else
             spdlog::info("New entity remotely managed, form id: {:X}, server id: {:X}", pActor->formID, pRemoteComponent->Id);
+
+        return;
+    }
+
+    if (m_world.any_of<RemoteComponent, LocalComponent, WaitingForAssignmentComponent>(aEntity))
+        return;
+
+    CacheSystem::Setup(World::Get(), aEntity, pActor);
+
+    RequestServerAssignment(aEntity);
+}
+
+void CharacterService::ProcessNewEntityTargeted(entt::entity aEntity) const noexcept
+{
+    if (!m_transport.IsOnline())
+        return;
+
+    auto& formIdComponent = m_world.get<FormIdComponent>(aEntity);
+
+    Actor* const pActor = Cast<Actor>(TESForm::GetById(formIdComponent.Id));
+    if (!pActor)
+    {
+        spdlog::warn(__FUNCTION__ ": actor for new entity not found, form id: {:X}", formIdComponent.Id);
+        return;
+    }
+
+    if (auto* pRemoteComponent = m_world.try_get<RemoteComponent>(aEntity); pRemoteComponent)
+    {
+        // TODO(cosideci): don't just take all actors (i.e. from other parties),
+        // maybe check it server side, add a variable to the request.
+        if (!pActor->IsTemporary() && !pActor->IsMount())
+        {
+            spdlog::info("Sending ownership claim for actor {:X} with server id {:X}", pActor->formID,
+                         pRemoteComponent->Id);
+
+            TakeOwnership(pActor->formID, pRemoteComponent->Id, aEntity);
+        }
+        else
+            spdlog::info("New entity remotely managed, form id: {:X}, server id: {:X}", pActor->formID,
+                         pRemoteComponent->Id);
 
         return;
     }
@@ -1379,7 +1481,8 @@ Actor* CharacterService::CreateCharacterForEntity(entt::entity aEntity) const no
         return nullptr;
     }
 
-    pActor->GetExtension()->SetRemote(true);
+
+    pActor->GetExtension()->SetRemote(true);  
     pActor->rotation.x = acMessage.Rotation.x;
     pActor->rotation.z = acMessage.Rotation.y;
     pActor->MoveTo(PlayerCharacter::Get()->parentCell, pInterpolationComponent->Position);
@@ -1407,7 +1510,7 @@ ActorData CharacterService::BuildActorData(Actor* apActor) const noexcept
     actorData.InitialActorValues = apActor->GetEssentialActorValues();
     actorData.InitialInventory = apActor->GetActorInventory();
     actorData.IsDead = apActor->IsDead();
-    actorData.IsWeaponDrawn = apActor->actorState.IsWeaponFullyDrawn();
+    actorData.IsWeaponDrawn = apActor->IsWeaponDrawn();
 
     return actorData;
 }
@@ -1443,7 +1546,10 @@ void CharacterService::RunLocalUpdates() const noexcept
 void CharacterService::RunRemoteUpdates() noexcept
 {
     // Delay by 300ms to let the interpolation system accumulate interpolation points
-    const auto tick = m_transport.GetClock().GetCurrentTick() - 300;
+    const auto clampedTickDelay = std::clamp(m_transport.GetConnectionStatus().m_nPing, 50, 200) * 3;
+
+    // Delay by 300ms to let the interpolation system accumulate interpolation points
+    const auto tick = m_transport.GetClock().GetCurrentTick() - clampedTickDelay;
 
     // Interpolation has to keep running even if the actor is not in view, otherwise we will never know if we need to spawn it
     auto interpolatedEntities = m_world.view<RemoteComponent, InterpolationComponent>();
@@ -1458,6 +1564,7 @@ void CharacterService::RunRemoteUpdates() noexcept
         {
             auto* pForm = TESForm::GetById(pFormIdComponent->Id);
             pActor = Cast<Actor>(pForm);
+            
         }
 
         InterpolationSystem::Update(pActor, interpolationComponent, tick);
@@ -1508,6 +1615,7 @@ void CharacterService::RunRemoteUpdates() noexcept
         pActor->SetActorInventory(waitingFor3D.SpawnRequest.InventoryContent);
         pActor->SetFactions(waitingFor3D.SpawnRequest.FactionsContent);
         pActor->LoadAnimationVariables(waitingFor3D.SpawnRequest.LatestAction.Variables);
+        
         m_weaponDrawUpdates[pActor->formID] = {waitingFor3D.SpawnRequest.IsWeaponDrawn};
 
         if (pActor->IsDead() != waitingFor3D.SpawnRequest.IsDead)
@@ -1516,6 +1624,8 @@ void CharacterService::RunRemoteUpdates() noexcept
         if (pActor->IsVampireLord())
             pActor->FixVampireLordModel();
 
+
+
         toRemove.push_back(entity);
 
         spdlog::info("Applied 3D for actor, form id: {:X}", pActor->formID);
@@ -1523,6 +1633,7 @@ void CharacterService::RunRemoteUpdates() noexcept
 
     for (auto entity : toRemove)
         m_world.remove<WaitingFor3D>(entity);
+
 }
 
 void CharacterService::RunFactionsUpdates() const noexcept
@@ -1535,6 +1646,39 @@ void CharacterService::RunFactionsUpdates() const noexcept
         return;
 
     lastSendTimePoint = now;
+
+    const auto view = m_world.view<FormIdComponent>(entt::exclude<ObjectComponent>);
+    auto i = 0;
+    Vector<entt::entity> entities(view.begin(), view.end());
+
+    for (auto entity : entities)
+    {
+        auto& formIdComponent = view.get<FormIdComponent>(entity);
+        auto* pForm = TESForm::GetById(formIdComponent.Id);
+        auto* pActor = Cast<Actor>(pForm);
+
+        if (!pActor)
+        {
+            continue;
+        }
+
+        if (!pActor->GetExtension()->IsPlayer() and !pActor->IsPlayerSummon() and !pActor->IsTemporary() and
+            !pActor->IsDead())
+        {
+            if (auto* pRemoteComponent = m_world.try_get<RemoteComponent>(entity); pRemoteComponent)
+            {
+                // TODO(cosideci): don't just take all actors (i.e. from other parties),
+                // maybe check it server side, add a variable to the request.
+                if (m_world.GetPartyService().IsLeader() && !pActor->IsTemporary() && !pActor->IsMount())
+                {
+                    spdlog::info("Sending ownership claim for actor {:X} with server id {:X}", pActor->formID,
+                                 pRemoteComponent->Id);
+
+                    TakeOwnership(pActor->formID, pRemoteComponent->Id, entity);
+                }
+            }
+        }
+    }
 
     RequestFactionsChanges message;
 
@@ -1613,6 +1757,9 @@ void CharacterService::RunExperienceUpdates() noexcept
         return;
 
     lastSendTimePoint = now;
+    const auto view = m_world.view<FormIdComponent>(entt::exclude<ObjectComponent>);
+    auto i = 0;
+    Vector<entt::entity> entities(view.begin(), view.end());
 
     if (m_cachedExperience == 0.f)
         return;

@@ -23,7 +23,6 @@ void CombatService::OnProjectileLaunchRequest(const PacketEvent<ProjectileLaunch
     notify.OriginX = packet.OriginX;
     notify.OriginY = packet.OriginY;
     notify.OriginZ = packet.OriginZ;
-
     notify.ProjectileBaseID = packet.ProjectileBaseID;
     notify.WeaponID = packet.WeaponID;
     notify.AmmoID = packet.AmmoID;
@@ -31,7 +30,7 @@ void CombatService::OnProjectileLaunchRequest(const PacketEvent<ProjectileLaunch
     notify.ZAngle = packet.ZAngle;
     notify.XAngle = packet.XAngle;
     notify.YAngle = packet.YAngle;
-
+  
     notify.ParentCellID = packet.ParentCellID;
 
     notify.SpellID = packet.SpellID;

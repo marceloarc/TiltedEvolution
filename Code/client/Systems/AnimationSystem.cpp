@@ -97,6 +97,7 @@ void AnimationSystem::Serialize(World& aWorld, ClientReferencesMoveRequest& aMov
     if (const auto pWorldSpace = pActor->GetWorldSpace())
         World::Get().GetModSystem().GetServerModId(pWorldSpace->formID, movement.WorldSpaceId.ModId, movement.WorldSpaceId.BaseId);
 
+
     movement.Position = pActor->position;
 
     movement.Rotation.x = pActor->rotation.x;

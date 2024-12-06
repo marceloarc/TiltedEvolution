@@ -83,11 +83,26 @@ static __declspec(noinline) bool DrawInWorldSpace(TESObjectREFR* apRefr, ImVec2&
     outViewPos = {};
     return false;
 }
-static __declspec(noinline) bool DrawInWorldSpaceHeight(TESObjectREFR* apRefr, ImVec2& outViewPos, ImVec2& elementsize)
+static __declspec(noinline) bool DrawInWorldSpaceHeight(TESObjectREFR* apRefr, ImVec2& outViewPos)
 {
     // Attach at the head ish.
     auto pos = apRefr->position;
     pos.z -= apRefr->GetHeight();
+    pos.z += 20;
+    auto boundMax = apRefr->GetBoundMax();
+    auto boundMin = apRefr->GetBoundMin();
+
+    // Calcula largura (width), profundidade (depth) e altura (height)
+    float width = boundMax.x - boundMin.x;
+    float depth = boundMax.y - boundMin.y;
+
+    // Ajusta a posição horizontal (centro no eixo X)
+    pos.x = boundMin.x + width / 2.0f;
+
+    // Ajusta a posição vertical (centro no eixo Y)
+    pos.y = boundMin.y + depth / 2.0f;
+
+    // Ajusta a altura (posição acima da cabeça)
     NiPoint3 screenPoint{};
     HUDMenuUtils::WorldPtToScreenPt3(pos, screenPoint);
     // Calculate window collision bounds.
@@ -101,8 +116,8 @@ static __declspec(noinline) bool DrawInWorldSpaceHeight(TESObjectREFR* apRefr, I
 
     // translate to screen
     const ImVec2 screenPos = ImVec2{
-        (pViewport->uiWindowWidth * screenPoint.x) + bounds.left - elementsize.x/2,
-        (pViewport->uiWindowHeight * (1.0f - screenPoint.y)) + bounds.top - elementsize.y * 10,
+        (pViewport->uiWindowWidth * screenPoint.x) + bounds.left,
+        (pViewport->uiWindowHeight * (1.0f - screenPoint.y)) + bounds.top,
     };
 
     // implements HUDMarkerData::CalculateFloatingMarkerPositionAndVisiblity from FO4

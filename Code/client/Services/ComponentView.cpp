@@ -83,11 +83,13 @@ static __declspec(noinline) bool DrawInWorldSpace(TESObjectREFR* apRefr, ImVec2&
     outViewPos = {};
     return false;
 }
-static __declspec(noinline) bool DrawInWorldSpaceHeight(TESObjectREFR* apRefr, ImVec2& outViewPos, ImVec2& elementsize)
+static __declspec(noinline) bool DrawInWorldSpaceHeight(TESObjectREFR* apRefr, ImVec2& outViewPos)
 {
     // Attach at the head ish.
     auto pos = apRefr->position;
-    pos.z -= apRefr->GetHeight();
+    pos.z -= apRefr->GetHeight()*1.2;
+    pos.x -= apRefr->GetWidth() / 2 *0.5;
+
     NiPoint3 screenPoint{};
     HUDMenuUtils::WorldPtToScreenPt3(pos, screenPoint);
     // Calculate window collision bounds.
@@ -101,8 +103,8 @@ static __declspec(noinline) bool DrawInWorldSpaceHeight(TESObjectREFR* apRefr, I
 
     // translate to screen
     const ImVec2 screenPos = ImVec2{
-        (pViewport->uiWindowWidth * screenPoint.x) + bounds.left - elementsize.x/2,
-        (pViewport->uiWindowHeight * (1.0f - screenPoint.y)) + bounds.top - elementsize.y * 10,
+        (pViewport->uiWindowWidth * screenPoint.x) + bounds.left,
+        (pViewport->uiWindowHeight * (1.0f - screenPoint.y)) + bounds.top,
     };
 
     // implements HUDMarkerData::CalculateFloatingMarkerPositionAndVisiblity from FO4

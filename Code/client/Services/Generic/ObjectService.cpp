@@ -262,6 +262,7 @@ void ObjectService::OnActivate(const ActivateEvent& acEvent) noexcept
 
 void ObjectService::OnActivateNotify(const NotifyActivate& acMessage) noexcept
 {
+    static bool s_startTimer = false;
     Actor* pActor = Utils::GetByServerId<Actor>(acMessage.ActivatorId);
     if (!pActor)
     {

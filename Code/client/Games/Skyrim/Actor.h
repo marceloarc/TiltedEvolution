@@ -204,6 +204,9 @@ struct Actor : TESObjectREFR
     [[nodiscard]] bool IsDragon() const noexcept;
     [[nodiscard]] bool IsPlayerSummon() const noexcept;
     [[nodiscard]] bool IsInCombat() const noexcept;
+    [[nodiscard]] bool IsOnMount() const noexcept;
+    [[nodiscard]] bool IsWeaponDrawn() const noexcept;
+    [[nodiscard]] bool IsAIEnabled() const noexcept;
     [[nodiscard]] Actor* GetCombatTarget() const noexcept;
     [[nodiscard]] bool HasPerk(uint32_t aPerkFormId) const noexcept;
     [[nodiscard]] uint8_t GetPerkRank(uint32_t aPerkFormId) const noexcept;
@@ -228,11 +231,17 @@ struct Actor : TESObjectREFR
     void SetEssentialEx(bool aSet) noexcept;
     void SetNoBleedoutRecovery(bool aSet) noexcept;
     void SetPlayerRespawnMode(bool aSet = true) noexcept;
+    void EnableAI(bool aSet = true) noexcept;
+    void SetDontMove(bool aSet = true) noexcept;
     void SetPlayerTeammate(bool aSet) noexcept;
+    void SetAlpha(float afTargetAlpha, bool abFade = false) noexcept;
 
     // Actions
     void UnEquipAll() noexcept;
+    void DrawWeapon() noexcept;
+    bool Dismount() noexcept;
     void RemoveFromAllFactions() noexcept;
+    void EvaluatePackage() noexcept;
     void QueueUpdate() noexcept;
     bool InitiateMountPackage(Actor* apMount) noexcept;
     void GenerateMagicCasters() noexcept;
@@ -251,7 +260,6 @@ struct Actor : TESObjectREFR
     bool PlayIdle(TESIdleForm* apIdle) noexcept;
     void FixVampireLordModel() noexcept;
     bool RemoveSpell(MagicItem* apSpell) noexcept;
-
     enum ActorFlags
     {
         IS_A_MOUNT = 1 << 1,

@@ -63,6 +63,7 @@ bool TESQuest::IsStageDone(uint16_t stageIndex)
     return false;
 }
 
+
 bool TESQuest::Kill()
 {
     using TSetStopped = void(TESQuest*, bool);
