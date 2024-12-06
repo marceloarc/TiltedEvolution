@@ -232,7 +232,7 @@ void DebugService::DrawCombatView()
                         {
                             auto& action = pLocalComponent->CurrentAction;
 
-                            if (action.EventName == "Unequip")
+                            if (action.EventName == "Unequip" or action.EventName == "combatStanceStop")
                             {
                                 pActor->Reset();
                             }
@@ -242,7 +242,7 @@ void DebugService::DrawCombatView()
                     {
                         if (auto* pComponent = m_world.try_get<RemoteAnimationComponent>(entity))
                         {
-                            if (pComponent->LastRanAction.EventName == "Unequip")
+                            if (pComponent->LastRanAction.EventName == "Unequip" or pComponent->LastRanAction.EventName == "combatStanceStop")
                             {
                                 pActor->Reset();
                             }

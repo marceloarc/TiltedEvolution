@@ -385,4 +385,9 @@ void ActorValueService::OnDeathStateChange(const NotifyDeathStateChange& acMessa
     if (pActor->IsDead() != acMessage.IsDead)
         acMessage.IsDead ? pActor->Kill() : pActor->Respawn();
 
+    if (pActor->IsDead())
+    {
+        pActor->GetExtension()->SetRemote(false);
+    }
+
 }

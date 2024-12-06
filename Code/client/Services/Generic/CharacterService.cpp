@@ -193,7 +193,14 @@ void CharacterService::OnActorAdded(const ActorAddedEvent& acEvent) noexcept
     if (it != std::end(view))
     {
         Actor* pActor = Cast<Actor>(TESForm::GetById(acEvent.FormId));
-        pActor->GetExtension()->SetRemote(true);
+        if (pActor->IsDead())
+        {
+            pActor->GetExtension()->SetRemote(false);
+        }
+        else
+        {
+            pActor->GetExtension()->SetRemote(true);
+        }
 
         entity = *it;
     }
@@ -334,7 +341,15 @@ void CharacterService::OnAssignCharacter(const AssignCharacterResponse& acMessag
         spdlog::info("Received remote actor, form id: {:X}, isweapondrawn: {}", pActor->formID, acMessage.IsWeaponDrawn);
 
         m_world.emplace_or_replace<RemoteComponent>(cEntity, acMessage.ServerId, formIdComponent->Id);
-        pActor->GetExtension()->SetRemote(true);
+        if (pActor->IsDead())
+        {
+            pActor->GetExtension()->SetRemote(false);
+        }
+        else
+        {
+            pActor->GetExtension()->SetRemote(true);
+        }
+
 
         InterpolationSystem::Setup(m_world, cEntity);
         AnimationSystem::Setup(m_world, cEntity);
@@ -438,7 +453,15 @@ void CharacterService::OnCharacterSpawn(const CharacterSpawnRequest& acMessage) 
     if (pActor->IsDisabled())
         pActor->Enable();
 
-    pActor->GetExtension()->SetRemote(true);
+    if (pActor->IsDead())
+    {
+        pActor->GetExtension()->SetRemote(false);
+    }
+    else
+    {
+        pActor->GetExtension()->SetRemote(true);
+    }
+
     
 
     pActor->rotation.x = acMessage.Rotation.x;
@@ -1058,8 +1081,16 @@ void CharacterService::OnNotifyRelinquishControl(const NotifyRelinquishControl& 
                 continue;
             }
 
-            pActor->GetExtension()->SetRemote(true);
-            
+            if (pActor->IsDead())
+            {
+                pActor->GetExtension()->SetRemote(false);
+            }
+            else
+            {
+                pActor->GetExtension()->SetRemote(true);
+            }
+
+                    
 
             InterpolationSystem::Setup(m_world, entity);
             AnimationSystem::Setup(m_world, entity);
@@ -1482,7 +1513,15 @@ Actor* CharacterService::CreateCharacterForEntity(entt::entity aEntity) const no
     }
 
 
-    pActor->GetExtension()->SetRemote(true);  
+    if (pActor->IsDead())
+    {
+        pActor->GetExtension()->SetRemote(false);
+    }
+    else
+    {
+        pActor->GetExtension()->SetRemote(true);
+    }
+
     pActor->rotation.x = acMessage.Rotation.x;
     pActor->rotation.z = acMessage.Rotation.y;
     pActor->MoveTo(PlayerCharacter::Get()->parentCell, pInterpolationComponent->Position);
